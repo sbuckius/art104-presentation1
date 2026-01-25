@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reflection + Speculation Worksheet</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Export Libraries -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<style>
+body {
+  font-family: system-ui, sans-serif;
+  background:#111;
+  color:#eee;
+  padding:20px;
+}
+
+h1 {
+  font-size:1.4rem;
+}
+
+.instructions {
+  max-width:760px;
+  color:#ccc;
+  margin-bottom:12px;
+}
+
+button {
+  margin:4px 6px 12px 0;
+  padding:6px 12px;
+  border-radius:6px;
+  border:none;
+  cursor:pointer;
+}
+
+.question {
+  border:1px solid #333;
+  border-radius:10px;
+  padding:15px;
+  margin-bottom:18px;
+  background:#181818;
+}
+
+.prompt {
+  font-size:0.85rem;
+  color:#bbb;
+  margin:6px 0 10px;
+}
+
+.options {
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  margin-bottom:10px;
+}
+
+label {
+  cursor:pointer;
+}
+
+textarea {
+  width:100%;
+  min-height:60px;
+  background:#000;
+  color:#fff;
+  border:1px solid #333;
+  border-radius:6px;
+  padding:8px;
+}
+
+.responses {
+  margin-top:8px;
+  font-size:0.8rem;
+  color:#aaa;
+}
+</style>
+</head>
+
+<body>
+
+<h1>Presentation 1: Reflection OR Speculation</h1>
+
+<div class="instructions">
+For each presentation, choose ONE question to answer and write one sentence. You can export all of your answers as a PDF to turn in on CANVAS.
+</div>
+
+<div id="anonLabel"></div>
+
+<button id="exportCSV">Export CSV</button>
+<button id="exportPDF">Export PDF</button>
+<button id="exportPNG">Export PNG</button>
+
+<div id="questions"></div>
+
+<!-- Firebase App -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { 
+  getFirestore, 
+  collection, 
+  addDoc, 
+  query, 
+  where, 
+  onSnapshot,
+  getDocs
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+/* -------------------------
+   Firebase Config
+--------------------------*/
+
+const firebaseConfig = {
+
+  apiKey: "AIzaSyAUhFwBjZjVolme4MyLaMAE1gz1RpTPE-o",
+
+  authDomain: "art104presentation1.firebaseapp.com",
+
+  projectId: "art104presentation1",
+
+  storageBucket: "art104presentation1.firebasestorage.app",
+
+  messagingSenderId: "83591855087",
+
+  appId: "1:83591855087:web:13fae6dcda649eb2df541a",
+
+  measurementId: "G-P05MZVDNWT"
+
+};
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+/* -------------------------
+   Question Texts
+--------------------------*/
+
+const QUESTION_A = `What is one thing in this presentation that you think is interesting and connects to you? It can connect to your interests, your opinions, your lived experience, your feelings, your goals, your creative work. Write one sentence about it.`;
+
+const QUESTION_B = `Write one sentence in which you speculate about an artwork that you could make that is inspired by something in this presentation. What is your speculative artwork?`;
+
+/* -------------------------
+   Anonymous ID
+--------------------------*/
+
+function generateID() {
+  return Math.random().toString(36).substring(2, 8).toUpperCase();
+}
+
+let anonID = localStorage.getItem("anonID");
+if (!anonID) {
+  anonID = generateID();
+  localStorage.setItem("anonID", anonID);
+}
+
+document.getElementById("anonLabel").textContent =
+  `Your anonymous ID: ${anonID}`;
+
+/* -------------------------
+   Build Questions
+--------------------------*/
+
+const container = document.getElementById("questions");
+
+for (let i = 1; i <= 24; i++) {
+  const div = document.createElement("div");
+  div.className = "question";
+  div.innerHTML = `
+    <h3>Presentation ${i}</h3>
+
+    <div class="options">
+      <label>
+        <input type="radio" name="choice-${i}" value="A">
+        <strong>A.</strong> ${QUESTION_A}
+      </label>
+
+      <label>
+        <input type="radio" name="choice-${i}" value="B">
+        <strong>B.</strong> ${QUESTION_B}
+      </label>
+    </div>
+
+    <textarea id="text-${i}" placeholder="Write one sentence..."></textarea><br>
+    <button onclick="submitAnswer(${i})">Submit</button>
+
+    <div class="responses" id="responses-${i}"></div>
+  `;
+  container.appendChild(div);
+  listenForResponses(i);
+}
+
+/* -------------------------
+   Submit Answer
+--------------------------*/
+
+window.submitAnswer = async function(num) {
+  const choiceEl = document.querySelector(`input[name="choice-${num}"]:checked`);
+  const text = document.getElementById(`text-${num}`).value.trim();
+
+  if (!choiceEl || !text) {
+    alert("Please select A or B and write a sentence.");
+    return;
+  }
+
+  const choice = choiceEl.value;
+  const promptText = choice === "A" ? QUESTION_A : QUESTION_B;
+
+  await addDoc(collection(db, "responses"), {
+    questionNumber: num,
+    choice,
+    promptText,
+    text,
+    anonID,
+    timestamp: Date.now()
+  });
+
+  document.getElementById(`text-${num}`).value = "";
+};
+
+/* -------------------------
+   Live Responses
+--------------------------*/
+
+function listenForResponses(num) {
+  const q = query(
+    collection(db, "responses"),
+    where("questionNumber", "==", num)
+  );
+
+  onSnapshot(q, (snapshot) => {
+    const box = document.getElementById(`responses-${num}`);
+    box.innerHTML = "";
+
+    snapshot.forEach((doc) => {
+      const d = doc.data();
+      const row = document.createElement("div");
+      row.textContent = `${d.anonID} (${d.choice}): ${d.text}`;
+      box.appendChild(row);
+    });
+  });
+}
+
+/* -------------------------
+   Fetch My Responses
+--------------------------*/
+
+async function getMyResponses() {
+  const q = query(
+    collection(db, "responses"),
+    where("anonID", "==", anonID)
+  );
+
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(d => d.data());
+}
+
+/* -------------------------
+   Engineering Worksheet Layout
+--------------------------*/
+
+function buildExportLayout(responses) {
+  const wrapper = document.createElement("div");
+
+  wrapper.style.width = "850px";
+  wrapper.style.padding = "40px";
+  wrapper.style.background = `
+    repeating-linear-gradient(
+      0deg,
+      #f2f6fb,
+      #f2f6fb 24px,
+      #e3ebf5 25px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      #f2f6fb,
+      #f2f6fb 24px,
+      #e3ebf5 25px
+    )
+  `;
+  wrapper.style.fontFamily = "Courier New, monospace";
+  wrapper.style.color = "#111";
+  wrapper.style.border = "2px solid #111";
+
+  const today = new Date().toLocaleDateString();
+
+  const header = document.createElement("div");
+  header.style.border = "2px solid #111";
+  header.style.padding = "12px";
+  header.style.marginBottom = "20px";
+  header.style.display = "grid";
+  header.style.gridTemplateColumns = "2fr 1fr 1fr";
+  header.style.gap = "10px";
+
+  header.innerHTML = `
+    <div>
+      <strong>SPECULATIVE RESPONSE WORKSHEET</strong><br>
+      Project: Reflection + Speculation
+    </div>
+    <div>
+      <strong>Anon ID</strong><br>
+      ${anonID}
+    </div>
+    <div>
+      <strong>Date</strong><br>
+      ${today}
+    </div>
+  `;
+
+  wrapper.appendChild(header);
+
+  responses
+    .sort((a,b) => a.questionNumber - b.questionNumber)
+    .forEach(r => {
+      const block = document.createElement("div");
+      block.style.border = "1.5px solid #111";
+      block.style.marginBottom = "16px";
+      block.style.padding = "10px";
+      block.style.background = "rgba(255,255,255,0.9)";
+
+      block.innerHTML = `
+        <div style="margin-bottom:6px;">
+          <strong>[${r.questionNumber}] (${r.choice})</strong>
+        </div>
+
+        <div style="font-size:12px; margin-bottom:6px;">
+          ${r.promptText}
+        </div>
+
+        <div style="border-top:1px solid #111; padding-top:6px; min-height:40px;">
+          ${r.text}
+        </div>
+      `;
+
+      wrapper.appendChild(block);
+    });
+
+  return wrapper;
+}
+
+/* -------------------------
+   CSV Export
+--------------------------*/
+
+document.getElementById("exportCSV").addEventListener("click", async () => {
+  const responses = await getMyResponses();
+  if (!responses.length) return alert("No responses yet.");
+
+  let csv = "Question,Choice,Prompt,Response,AnonymousID\n";
+
+  responses.forEach(r => {
+    csv += `${r.questionNumber},${r.choice},"${r.promptText.replace(/"/g,'""')}","${r.text.replace(/"/g,'""')}",${r.anonID}\n`;
+  });
+
+  const blob = new Blob([csv], { type:"text/csv" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `my-responses-${anonID}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+/* -------------------------
+   PDF Export
+--------------------------*/
+
+document.getElementById("exportPDF").addEventListener("click", async () => {
+  const responses = await getMyResponses();
+  if (!responses.length) return alert("No responses yet.");
+
+  const layout = buildExportLayout(responses);
+  document.body.appendChild(layout);
+
+  const canvas = await html2canvas(layout, { scale: 2 });
+  const imgData = canvas.toDataURL("image/png");
+
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF("p", "px", "a4");
+
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = (canvas.height * pageWidth) / canvas.width;
+
+  pdf.addImage(imgData, "PNG", 0, 0, pageWidth, pageHeight);
+  pdf.save(`my-responses-${anonID}.pdf`);
+
+  layout.remove();
+});
+
+/* -------------------------
+   PNG Export
+--------------------------*/
+
+document.getElementById("exportPNG").addEventListener("click", async () => {
+  const responses = await getMyResponses();
+  if (!responses.length) return alert("No responses yet.");
+
+  const layout = buildExportLayout(responses);
+  document.body.appendChild(layout);
+
+  const canvas = await html2canvas(layout, { scale: 2 });
+  const link = document.createElement("a");
+  link.download = `my-responses-${anonID}.png`;
+  link.href = canvas.toDataURL("image/png");
+  link.click();
+
+  layout.remove();
+});
+</script>
+
+</body>
+</html>
