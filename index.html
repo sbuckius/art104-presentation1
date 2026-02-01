@@ -83,36 +83,20 @@ import {
   getDocs
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-/* -------------------------
-   Firebase Config
---------------------------*/
+/* Firebase */
 const firebaseConfig = {
-
   apiKey: "AIzaSyAUhFwBjZjVolme4MyLaMAE1gz1RpTPE-o",
-
   authDomain: "art104presentation1.firebaseapp.com",
-
-  databaseURL: "https://art104presentation1-default-rtdb.firebaseio.com",
-
   projectId: "art104presentation1",
-
   storageBucket: "art104presentation1.firebasestorage.app",
-
   messagingSenderId: "83591855087",
-
-  appId: "1:83591855087:web:13fae6dcda649eb2df541a",
-
-  measurementId: "G-P05MZVDNWT"
-
+  appId: "1:83591855087:web:13fae6dcda649eb2df541a"
 };
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-/* -------------------------
-   Anonymous ID
---------------------------*/
-
+/* Anonymous ID */
 function generateID() {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
@@ -126,34 +110,24 @@ if (!anonID) {
 document.getElementById("anonLabel").textContent =
   `Your anonymous ID: ${anonID}`;
 
-/* -------------------------
-   Build Questions
---------------------------*/
-
+/* Build Questions */
 const container = document.getElementById("questions");
 
 for (let i = 1; i <= 24; i++) {
-
   const div = document.createElement("div");
   div.className = "question";
-
   div.innerHTML = `
     <h3>Presentation ${i}</h3>
     <textarea id="text-${i}" placeholder="Write one sentence..."></textarea><br>
     <button onclick="submitAnswer(${i})">Submit</button>
     <div class="responses" id="responses-${i}"></div>
   `;
-
   container.appendChild(div);
   listenForResponses(i);
 }
 
-/* -------------------------
-   Submit
---------------------------*/
-
+/* Submit */
 window.submitAnswer = async function(num) {
-
   const text = document.getElementById(`text-${num}`).value.trim();
   if (!text) return alert("Please write something first.");
 
@@ -167,19 +141,14 @@ window.submitAnswer = async function(num) {
   document.getElementById(`text-${num}`).value = "";
 };
 
-/* -------------------------
-   Live Responses
---------------------------*/
-
+/* Live Responses */
 function listenForResponses(num) {
-
   const q = query(
     collection(db, "responses"),
     where("questionNumber", "==", num)
   );
 
   onSnapshot(q, (snapshot) => {
-
     const box = document.getElementById(`responses-${num}`);
     box.innerHTML = "";
 
@@ -189,14 +158,10 @@ function listenForResponses(num) {
       row.textContent = `${d.anonID}: ${d.text}`;
       box.appendChild(row);
     });
-
   });
 }
 
-/* -------------------------
-   Fetch My Responses
---------------------------*/
-
+/* Fetch My Responses */
 async function getMyResponses() {
   const q = query(
     collection(db, "responses"),
@@ -206,10 +171,7 @@ async function getMyResponses() {
   return snapshot.docs.map(d => d.data());
 }
 
-/* -------------------------
-   Engineering Frame
---------------------------*/
-
+/* Engineering Frame */
 function addEngineeringFrame(pdf, pageNumber, titleText) {
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
@@ -220,16 +182,15 @@ function addEngineeringFrame(pdf, pageNumber, titleText) {
   pdf.setLineWidth(0.5);
   pdf.rect(10, pageHeight - 30, pageWidth - 20, 20);
 
+  pdf.setFont("helvetica", "normal");
   pdf.setFontSize(8);
+
   pdf.text(titleText, 15, pageHeight - 20);
   pdf.text(`Date: ${new Date().toLocaleDateString()}`, 15, pageHeight - 15);
   pdf.text(`Page ${pageNumber}`, pageWidth - 30, pageHeight - 15);
 }
 
-/* -------------------------
-   Student PDF
---------------------------*/
-
+/* Student PDF */
 window.exportMyPDF = async function () {
 
   const responses = await getMyResponses();
@@ -249,6 +210,7 @@ window.exportMyPDF = async function () {
 
   addEngineeringFrame(pdf, pageNumber, `Student Copy — ID: ${anonID}`);
 
+  pdf.setFont("helvetica", "normal");
   pdf.setFontSize(12);
 
   for (let r of responses) {
@@ -260,14 +222,20 @@ window.exportMyPDF = async function () {
       pdf.addPage();
       pageNumber++;
       addEngineeringFrame(pdf, pageNumber, `Student Copy — ID: ${anonID}`);
+
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(12);
+
       y = 30;
     }
 
     pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(12);
     pdf.text(title, margin, y);
     y += 7;
 
     pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(12);
     pdf.text(wrapped, margin, y);
     y += wrapped.length * 6 + 10;
   }
@@ -275,10 +243,7 @@ window.exportMyPDF = async function () {
   pdf.save(`student_${anonID}.pdf`);
 };
 
-/* -------------------------
-   Teacher PDF
---------------------------*/
-
+/* Teacher PDF */
 window.exportTeacherPDF = async function () {
 
   const snapshot = await getDocs(collection(db, "responses"));
@@ -303,6 +268,7 @@ window.exportTeacherPDF = async function () {
 
   addEngineeringFrame(pdf, pageNumber, "Teacher Copy — All Students");
 
+  pdf.setFont("helvetica", "normal");
   pdf.setFontSize(10);
 
   for (let r of allResponses) {
@@ -314,6 +280,10 @@ window.exportTeacherPDF = async function () {
       pdf.addPage();
       pageNumber++;
       addEngineeringFrame(pdf, pageNumber, "Teacher Copy — All Students");
+
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(10);
+
       y = 30;
     }
 
@@ -324,10 +294,7 @@ window.exportTeacherPDF = async function () {
   pdf.save("teacher_all_students.pdf");
 };
 
-/* -------------------------
-   PNG Export
---------------------------*/
-
+/* PNG */
 window.exportPNG = async function() {
   const canvas = await html2canvas(document.body, { scale: 2 });
   const link = document.createElement("a");
@@ -336,12 +303,8 @@ window.exportPNG = async function() {
   link.click();
 };
 
-/* -------------------------
-   CSV Export
---------------------------*/
-
+/* CSV */
 window.exportCSV = async function() {
-
   const responses = await getMyResponses();
   if (!responses.length) return alert("No responses found.");
 
