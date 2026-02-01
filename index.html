@@ -15,6 +15,15 @@ body {
   color:#eee;
   padding:20px;
 }
+
+#exportBar {
+  display:flex;
+  gap:10px;
+  margin-bottom:20px;
+  padding-bottom:10px;
+  border-bottom:1px solid #333;
+}
+
 .question {
   border:1px solid #333;
   border-radius:10px;
@@ -22,6 +31,7 @@ body {
   margin-bottom:18px;
   background:#181818;
 }
+
 textarea {
   width:100%;
   min-height:60px;
@@ -31,13 +41,14 @@ textarea {
   border-radius:6px;
   padding:8px;
 }
+
 .responses {
   margin-top:8px;
   font-size:0.8rem;
   color:#aaa;
 }
+
 button {
-  margin:4px 6px 12px 0;
   padding:6px 12px;
   border-radius:6px;
   border:none;
@@ -48,9 +59,15 @@ button {
 
 <body>
 
+<div id="exportBar">
+  <button onclick="exportMyPDF()">Export My Answers (Student PDF)</button>
+  <button onclick="exportTeacherPDF()">Export Teacher View</button>
+  <button onclick="exportPNG()">Export Full Page (PNG)</button>
+  <button onclick="exportCSV()">Export My Answers (CSV)</button>
+</div>
+
 <h1>Reflection + Speculation Worksheet</h1>
 <div id="anonLabel"></div>
-
 <div id="questions"></div>
 
 <script type="module">
@@ -69,14 +86,24 @@ import {
 /* -------------------------
    Firebase Config
 --------------------------*/
-
 const firebaseConfig = {
+
   apiKey: "AIzaSyAUhFwBjZjVolme4MyLaMAE1gz1RpTPE-o",
+
   authDomain: "art104presentation1.firebaseapp.com",
+
+  databaseURL: "https://art104presentation1-default-rtdb.firebaseio.com",
+
   projectId: "art104presentation1",
+
   storageBucket: "art104presentation1.firebasestorage.app",
+
   messagingSenderId: "83591855087",
-  appId: "1:83591855087:web:13fae6dcda649eb2df541a"
+
+  appId: "1:83591855087:web:13fae6dcda649eb2df541a",
+
+  measurementId: "G-P05MZVDNWT"
+
 };
 
 const app = initializeApp(firebaseConfig);
@@ -122,7 +149,7 @@ for (let i = 1; i <= 24; i++) {
 }
 
 /* -------------------------
-   Submit Answer (WITH ERROR HANDLING)
+   Submit
 --------------------------*/
 
 window.submitAnswer = async function(num) {
@@ -130,83 +157,207 @@ window.submitAnswer = async function(num) {
   const text = document.getElementById(`text-${num}`).value.trim();
   if (!text) return alert("Please write something first.");
 
-  try {
+  await addDoc(collection(db, "responses"), {
+    questionNumber: num,
+    text,
+    anonID,
+    timestamp: Date.now()
+  });
 
-    await addDoc(collection(db, "responses"), {
-      questionNumber: num,
-      text,
-      anonID,
-      timestamp: Date.now()
-    });
-
-    console.log("Document successfully written.");
-    document.getElementById(`text-${num}`).value = "";
-
-  } catch (error) {
-
-    console.error("Error writing document:", error);
-    alert("Error saving response. Check console for details.");
-  }
+  document.getElementById(`text-${num}`).value = "";
 };
 
 /* -------------------------
-   Live Responses (WITH ERROR HANDLING)
+   Live Responses
 --------------------------*/
 
 function listenForResponses(num) {
 
-  try {
+  const q = query(
+    collection(db, "responses"),
+    where("questionNumber", "==", num)
+  );
 
-    const q = query(
-      collection(db, "responses"),
-      where("questionNumber", "==", num)
-    );
+  onSnapshot(q, (snapshot) => {
 
-    onSnapshot(q,
-      (snapshot) => {
+    const box = document.getElementById(`responses-${num}`);
+    box.innerHTML = "";
 
-        const box = document.getElementById(`responses-${num}`);
-        box.innerHTML = "";
+    snapshot.forEach((doc) => {
+      const d = doc.data();
+      const row = document.createElement("div");
+      row.textContent = `${d.anonID}: ${d.text}`;
+      box.appendChild(row);
+    });
 
-        snapshot.forEach((doc) => {
-          const d = doc.data();
-          const row = document.createElement("div");
-          row.textContent = `${d.anonID}: ${d.text}`;
-          box.appendChild(row);
-        });
-      },
-      (error) => {
-        console.error("Listener error:", error);
-      }
-    );
-
-  } catch (error) {
-    console.error("Query setup error:", error);
-  }
+  });
 }
 
 /* -------------------------
-   Fetch My Responses (DEBUG SAFE)
+   Fetch My Responses
 --------------------------*/
 
 async function getMyResponses() {
-
-  try {
-
-    const q = query(
-      collection(db, "responses"),
-      where("anonID", "==", anonID)
-    );
-
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(d => d.data());
-
-  } catch (error) {
-    console.error("Fetch error:", error);
-    alert("Error fetching responses. Check console.");
-    return [];
-  }
+  const q = query(
+    collection(db, "responses"),
+    where("anonID", "==", anonID)
+  );
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(d => d.data());
 }
+
+/* -------------------------
+   Engineering Frame
+--------------------------*/
+
+function addEngineeringFrame(pdf, pageNumber, titleText) {
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+
+  pdf.setLineWidth(0.8);
+  pdf.rect(10, 10, pageWidth - 20, pageHeight - 20);
+
+  pdf.setLineWidth(0.5);
+  pdf.rect(10, pageHeight - 30, pageWidth - 20, 20);
+
+  pdf.setFontSize(8);
+  pdf.text(titleText, 15, pageHeight - 20);
+  pdf.text(`Date: ${new Date().toLocaleDateString()}`, 15, pageHeight - 15);
+  pdf.text(`Page ${pageNumber}`, pageWidth - 30, pageHeight - 15);
+}
+
+/* -------------------------
+   Student PDF
+--------------------------*/
+
+window.exportMyPDF = async function () {
+
+  const responses = await getMyResponses();
+  if (!responses.length) return alert("No responses found.");
+
+  responses.sort((a, b) => a.questionNumber - b.questionNumber);
+
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF("p", "mm", "a4");
+
+  const margin = 20;
+  const pageWidth = pdf.internal.pageSize.getWidth() - 40;
+  const pageHeight = pdf.internal.pageSize.getHeight();
+
+  let y = 30;
+  let pageNumber = 1;
+
+  addEngineeringFrame(pdf, pageNumber, `Student Copy — ID: ${anonID}`);
+
+  pdf.setFontSize(12);
+
+  for (let r of responses) {
+
+    const title = `Presentation ${r.questionNumber}`;
+    const wrapped = pdf.splitTextToSize(r.text, pageWidth);
+
+    if (y + wrapped.length * 6 > pageHeight - 40) {
+      pdf.addPage();
+      pageNumber++;
+      addEngineeringFrame(pdf, pageNumber, `Student Copy — ID: ${anonID}`);
+      y = 30;
+    }
+
+    pdf.setFont("helvetica", "bold");
+    pdf.text(title, margin, y);
+    y += 7;
+
+    pdf.setFont("helvetica", "normal");
+    pdf.text(wrapped, margin, y);
+    y += wrapped.length * 6 + 10;
+  }
+
+  pdf.save(`student_${anonID}.pdf`);
+};
+
+/* -------------------------
+   Teacher PDF
+--------------------------*/
+
+window.exportTeacherPDF = async function () {
+
+  const snapshot = await getDocs(collection(db, "responses"));
+  const allResponses = snapshot.docs.map(d => d.data());
+  if (!allResponses.length) return alert("No responses found.");
+
+  allResponses.sort((a, b) => {
+    if (a.questionNumber === b.questionNumber)
+      return a.anonID.localeCompare(b.anonID);
+    return a.questionNumber - b.questionNumber;
+  });
+
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF("p", "mm", "a4");
+
+  const margin = 20;
+  const pageWidth = pdf.internal.pageSize.getWidth() - 40;
+  const pageHeight = pdf.internal.pageSize.getHeight();
+
+  let y = 30;
+  let pageNumber = 1;
+
+  addEngineeringFrame(pdf, pageNumber, "Teacher Copy — All Students");
+
+  pdf.setFontSize(10);
+
+  for (let r of allResponses) {
+
+    const line = `Presentation ${r.questionNumber} — ${r.anonID}: ${r.text}`;
+    const wrapped = pdf.splitTextToSize(line, pageWidth);
+
+    if (y + wrapped.length * 5 > pageHeight - 40) {
+      pdf.addPage();
+      pageNumber++;
+      addEngineeringFrame(pdf, pageNumber, "Teacher Copy — All Students");
+      y = 30;
+    }
+
+    pdf.text(wrapped, margin, y);
+    y += wrapped.length * 5 + 8;
+  }
+
+  pdf.save("teacher_all_students.pdf");
+};
+
+/* -------------------------
+   PNG Export
+--------------------------*/
+
+window.exportPNG = async function() {
+  const canvas = await html2canvas(document.body, { scale: 2 });
+  const link = document.createElement("a");
+  link.download = "full_page.png";
+  link.href = canvas.toDataURL("image/png");
+  link.click();
+};
+
+/* -------------------------
+   CSV Export
+--------------------------*/
+
+window.exportCSV = async function() {
+
+  const responses = await getMyResponses();
+  if (!responses.length) return alert("No responses found.");
+
+  let csv = "Presentation,Response\n";
+
+  responses.forEach(r => {
+    const clean = r.text.replace(/"/g, '""');
+    csv += `"Presentation ${r.questionNumber}","${clean}"\n`;
+  });
+
+  const blob = new Blob([csv], { type: "text/csv" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `student_${anonID}.csv`;
+  link.click();
+};
 
 </script>
 </body>
